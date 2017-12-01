@@ -1,4 +1,7 @@
 <html>
+<h1>Forked:</h1>
+<p>What's been added? Make the logfile less awful to read and added CGI support for executable files (as long as they are *.cgi)</p>
+<p>Tested and compiled with Cygwin GCC and I'm almost certain it will compile on your distro's GCC</p>
 <h1>Simple webserver</h1>
 <p>This example of a simple webserver is inspired by IBM's really small webserver example, nweb.</p>
 <hr>
