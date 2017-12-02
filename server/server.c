@@ -131,7 +131,6 @@ void web(int fileid, int request) {
 		close(file_fd);
 		write(fileid, "HTTP/1.0 200 OK\r\n", strlen("HTTP/1.0 200 OK\r\n"));
 		buffer[3] = '.';
-		buffer[4] = '/';
 		FILE *command = popen(buffer+3, "rb");
 		if(!command) appendLog(SORRY, "Failed to execute: %s", buffer+3);
 		memset(buffer, 0, BUFSIZE+1);

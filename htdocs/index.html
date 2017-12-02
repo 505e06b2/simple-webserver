@@ -1,14 +1,49 @@
-<!DOCTYPE html>
-<html lang="en">
-<title>Oscar's web server example</title>
-<BODY BGCOLOR="grey">
-  <center>
-    <h1>Welcome to the default homepage!</h1>
-    <img src="scott.jpg" />
-    <p>Here's an image of scott pilgrim... he's really cool and you can learn about him <a href="http://scottpilgrim.com">here</a>.</p>
-  </center>
-  <p>
-    Just some basic default page. For another page... go <a href="page2.html">here</a>.
-  </p>
+<html>
+<head>
+	<title>HTTP Server</title>
+	<link rel="icon" type="image/png" href="https://avatars2.githubusercontent.com/u/20495854?s=50&v=4" />
+	<style>
+	
+body {
+	background: #1a1a1a;
+	text-align: center;
+	font-family: monospace;
+	font-size: 200%;
+}
+
+img {
+	width: 200px;
+}
+
+a {
+	color: #eee;
+}
+
+#parent {
+	position: relative;
+	height:100%;
+}
+
+#child {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 200px;
+    height: 400px;
+    margin: auto;
+}
+
+	</style>
+</head>
+<body>
+	<div id="parent">
+		<div id="child">
+			<a href="https://github.com/505e06b2/simple-webserver" title="Github"><img src="https://avatars2.githubusercontent.com/u/20495854?s=200&v=4"></a><br>
+			<br>
+			<a href="test.cgi">CGI Test</a>
+		</div>
+	</div>
 </body>
 </html>
