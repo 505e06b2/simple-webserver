@@ -48,6 +48,8 @@ struct {
 	{0,			0}
 };
 
+char logAbsolute[512];//Increase this if there are write/read errors
+
 void appendLog(int type, const char *fmt, ...) {
 	int logFile;
 	char appendLogbuffer[BUFLOG];
@@ -73,7 +75,7 @@ void appendLog(int type, const char *fmt, ...) {
 			break;
 	}
 	
-	if((logFile = open("server.log", O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
+	if((logFile = open(logAbsolute, O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
 		write(logFile, appendLogbuffer, strlen(appendLogbuffer)); 
 		write(logFile, "\n", 1);
 		close(logFile);
@@ -173,7 +175,16 @@ int main(int argc, char **argv) {
 			printf("ERROR: Bad top directory %s, see server -?\n", argv[2]);
 			exit(3);
 	}
-	if(chdir(argv[2]) == -1){ 
+	
+	//Set absolute path for log file or it becomes a security concern since anyone can read it
+	if(getcwd(logAbsolute, sizeof(logAbsolute)) == NULL) {
+		printf("ERROR: Can't get current working directory into 512bytes...\n", argv[2]);
+		exit(4);
+	} else {
+		strcat(logAbsolute, "/server.log");
+	}
+	
+	if(chdir(argv[2]) == -1) { 
 		printf("ERROR: Can't Change to directory %s\n", argv[2]);
 		exit(4);
 	}
