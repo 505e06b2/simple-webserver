@@ -49,6 +49,7 @@ struct {
 };
 
 char logAbsolute[512];//Increase this if there are write/read errors
+int parentPid;
 
 void appendLog(int type, const char *fmt, ...) {
 	int logFile;
@@ -152,9 +153,9 @@ void web(int fileid, int request) {
 	exit(1);
 }
 
-
 int main(int argc, char **argv) {
-	int i, port, pid, listenfd, socketfd, hit;
+	int i, port, pid, listenfd, socketfd;
+	unsigned long long hit; //All it does is count the requests...
 	socklen_t length;
 	static struct sockaddr_in cli_addr; 
 	static struct sockaddr_in serv_addr;
@@ -163,7 +164,7 @@ int main(int argc, char **argv) {
 		printf("usage: server [port] [server directory] &"
 					 "\tExample: server 80 ./ &\n\n"
 					 "\tOnly Supports:");
-		for(i=0;extensions[i].ext != 0;i++) printf(" %s",extensions[i].ext);
+		for(i = 0; extensions[i].ext != 0; i++) printf(" %s", extensions[i].ext);
 
 		printf("\n\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin \n");
 		exit(0);
@@ -189,36 +190,34 @@ int main(int argc, char **argv) {
 		exit(4);
 	}
 
-	if(fork() != 0) return 0; 
-	signal(SIGCLD, SIG_IGN); 
-	signal(SIGHUP, SIG_IGN); 
-	for(i=0;i<32;i++) (void)close(i);	
-	setpgrp();	
+	if(fork() != 0) return 0; //This kills the parent so stdio is free and it runs in the background
+	signal(SIGCHLD, SIG_IGN); //Ignore when children close
+	signal(SIGHUP, SIG_IGN); //Ignore if a process hangs
+	for(i = 0; i < 32; i++) close(i);
+	setpgrp(); //Need this if the fork above is used since the first child will be made the main parent
 
 	appendLog(LOG, "STARTING - Port: %s", argv[1]);
 
-	if((listenfd = socket(AF_INET, SOCK_STREAM,0)) <0)
-		appendLog(ERROR, "System call: socket");
+	if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) appendLog(ERROR, "System call: socket");
+	
 	port = atoi(argv[1]);
-	if(port < 0 || port >60000)
-		appendLog(ERROR, "Invalid port number try [1,60000] - %s", argv[1]);
+	if(port < 0 || port >60000) appendLog(ERROR, "Invalid port number try [1,60000] - %s", argv[1]);
+	
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
-	if(bind(listenfd, (struct sockaddr *)&serv_addr,sizeof(serv_addr)) <0)
-		appendLog(ERROR, "System call: bind");
-	if( listen(listenfd,64) <0)
-		appendLog(ERROR, "System call: listen");
-
-	for(hit = 1; ; hit++) {
-		length = sizeof(cli_addr);
+	
+	if(bind(listenfd, (struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) appendLog(ERROR, "System call: bind");
+	if(listen(listenfd, 64) < 0) appendLog(ERROR, "System call: listen");
+	
+	length = sizeof(cli_addr); //This was inside the loop but it gets set the same value every time?
+	for(hit = 1; ; hit++) { //Forever
 		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) appendLog(ERROR, 0, "system call", "accept", 0);
 
-		if((pid = fork()) < 0) {
-			appendLog(ERROR, "System call: fork");
-		} else {
+		if((pid = fork()) < 0) appendLog(ERROR, "System call: fork");
+		else {
 			if(pid == 0) {
-				(void)close(listenfd);
+				close(listenfd);
 				web(socketfd, hit);
 			} else {
 				close(socketfd);
