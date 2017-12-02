@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 	}
 
 	if(fork() != 0) return 0; 
-	signal(SIGCHILD, SIG_IGN);  //The cool boys are doing it
+	signal(SIGCLD, SIG_IGN); 
 	signal(SIGHUP, SIG_IGN); 
 	for(i=0;i<32;i++) (void)close(i);	
 	setpgrp();	

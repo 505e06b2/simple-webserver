@@ -1,2 +1,2 @@
 #!/bin/sh
-make wkill || : && make test
+make wkill || : && make run

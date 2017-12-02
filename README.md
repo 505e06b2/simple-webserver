@@ -2,7 +2,7 @@
 <h1>Forked:</h1>
 <p>What's been added? Made the logfile less awful to read and added CGI support for executable files (as long as they are *.cgi)</p>
 <p>Tested and compiled with Cygwin GCC and I'm almost certain it will compile on your distro's GCC</p>
-<p>To test, run "make run"; I've been using "make wkill || : && make test" with cygwin. It would be "make lkill || : && make test" for linux (uses killall instead of taskkill)</p>
+<p>To test, run "make run"; I've been using "make wkill || : && make run" with cygwin. It would be "make lkill || : && make run" for linux (uses killall instead of taskkill)</p>
 <h1>Simple webserver</h1>
 <p>This example of a simple webserver is inspired by IBM's really small webserver example, nweb.</p>
 <hr>
