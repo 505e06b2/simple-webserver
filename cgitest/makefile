@@ -1,2 +1,2 @@
 all:
-	gcc main.c -o ../test.cgi
+	gcc main.c -o ../htdocs/test.cgi
