@@ -145,7 +145,7 @@ void web(int fileid, int request) {
 		close(file_fd);
 	}
 #if defined(LINUX) || defined(__CYGWIN__)
-	sleep(0.5); //Less refresh spamming
+	//sleep(0.3); //Less refresh spamming
 #endif
 	exit(1);
 }
