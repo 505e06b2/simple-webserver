@@ -50,8 +50,14 @@ struct {
 	{0,			0}
 };
 
-char logAbsolute[128];//Increase this if there are write/read errors
-int parentPid;
+char logAbsolute[128]; //Increase this if there are write/read errors
+
+int isDirectory(const char *path) {
+   struct stat statbuf;
+   if (stat(path, &statbuf) != 0)
+       return 0;
+   return S_ISDIR(statbuf.st_mode);
+}
 
 char *formatLog(const char icon, const char *text) { //Must free malloc.
 	char *out = (char *)malloc(strlen(text) + sizeof("[ ] [00:00:00]: \n") + 1); //+ size of the text and \n and \0
@@ -67,6 +73,7 @@ void appendLog(int type, const char *fmt, ...) {
 	int logFile;
 	char formatLogbuffer[BUFLOG];
 	char *appendLog;
+	char *printError;
 	
 	va_list args;
     va_start(args, fmt);
@@ -79,9 +86,11 @@ void appendLog(int type, const char *fmt, ...) {
 			break;
 		case SORRY:
 			appendLog = formatLog('!', formatLogbuffer); //Write to file
-			//sprintf(formatLogbuffer, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<HTML><BODY><H1>Web Server Error: %s</H1></BODY></HTML>\r\n", formatLogbuffer);
+			printError = malloc(sizeof(formatLogbuffer) + 108); //108 for the HTML below
+			sprintf(printError, "HTTP/1.0 404 Not Found\r\nContent-Type: text/html\r\n\r\n<HTML><BODY><H1>Web Server Error: %s</H1></BODY></HTML>\r\n", formatLogbuffer); //404 just so the browser knows it's a bad boi page
 			//write(ioout, appendLogbuffer, strlen(appendLogbuffer)); //Write to browser
-			puts(formatLogbuffer); //Fuck it, this makes things nicer but probably slower but that doesn't matter since it's going to close
+			puts(printError); //Fuck it, this makes things nicer but probably slower but that doesn't matter since it's going to close
+			free(printError);
 			break;
 		case BEGIN:
 			remove(logAbsolute); //No break so we can continue with the log
@@ -103,6 +112,8 @@ void web(int fileid, int request) {
 	long i, ret;
 	char *fstr;
 	static char buffer[BUFSIZE+1];
+	char ip[] = "255.255.255.255:65535"; //Can fit localhost too
+	char get[256]; //256 chars long should be OK unless it's in UTF8...
 
 	ret = read(fileid, buffer, BUFSIZE); 
 	if(ret <= 0) {
@@ -111,26 +122,39 @@ void web(int fileid, int request) {
 		buffer[ret] = 0;
 	else buffer[0] = 0;
 
+	if(strncasecmp(buffer, "GET ", 4) != 0) appendLog(SORRY, "Only simple GET operation supported: %s", buffer);
+	
 	for(i = 0; i < ret; i++) if(buffer[i] == '\r' || buffer[i] == '\n') buffer[i] = '\0'; //Split request in buffer
 
-	if( strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4) ) appendLog(SORRY, "Only simple GET operation supported: %s", buffer);
-
-	for(i = 4; i < BUFSIZE; i++) { 
+	for(i = 4; i < sizeof(get) + sizeof(ip) + 5; i++) { //I only need up to the host which is < 256
 		if(buffer[i] == ' ') { 
 			buffer[i] = 0;
 			break;
 		}
 	}
 	
-	appendLog(LOG, "%s <- %s", buffer, buffer+strlen(buffer)+17); //Buffer = "GET /[file]"; strlen(buffer)+2 = "HTTP 1.1"; strlen(buffer)+11 = "Host: [ip]"
+	strcpy(get, buffer+5); //Fill GET with path
+	memcpy(ip, buffer+strlen(buffer)+17, sizeof(ip)-1); //Get IP but make sure there's always a \0 at the end
+	
+	appendLog(LOG, "Get /%s <- %s", get, ip); //Buffer = "GET /[file]"; strlen(buffer)+2 = "HTTP 1.1"; strlen(buffer)+11 = "Host: [ip]"
 
 	for(j = 0; j < i-1; j++) if(buffer[j] == '.' && buffer[j+1] == '.') appendLog(SORRY, "Parent directory (..) path names not supported: %s", buffer);
+	
+	len = strlen(get);
+	if(len == 0 || get[len-1] == '/') memcpy(buffer+5+len, "index.html", sizeof("index.html")); //Default to index.html if there's a slash at the end of a get request
+	else if(isDirectory(get)) { //Redirect to slash
+		len += strlen(ip) + 90-5;
+		char *redirect = malloc(len);
+		sprintf(redirect, "HTTP/1.0 301 Moved Permanently\r\nLocation: http://%s/%s/\r\n", ip, get);
+		write(fileid, redirect, len);
+		exit(1);
+	}
 
-	if( !strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6) ) strcpy(buffer,"GET /index.html"); //Default to index.html
+	if((file_fd = open(buffer+5, O_RDONLY)) == -1) appendLog(SORRY, "Failed to open file: %s", buffer+5);
 
 	buflen = strlen(buffer);
 	fstr = 0;
-	for(i=0;extensions[i].ext != 0;i++) {
+	for(i = 0; extensions[i].ext != 0; i++) {
 		len = strlen(extensions[i].ext);
 		if( !strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
 			fstr = extensions[i].filetype;
@@ -138,13 +162,14 @@ void web(int fileid, int request) {
 		}
 	}
 	
-	if(fstr == 0) appendLog(SORRY, "File extension type not supported: %s", buffer); //File not legit (exe / no ext / php)
-
-	if((file_fd = open(&buffer[5], O_RDONLY)) == -1) appendLog(SORRY, "Failed to open file: %s", buffer+5);
+	if(fstr == 0) {
+		close(file_fd);
+		appendLog(SORRY, "File extension type not supported: %s", buffer); //File not legit (exe / no ext / php)
+	}
 	
 	if( strncmp("executable", fstr, sizeof("executable")-1 ) == 0) { //=== YOU NEED TO SET THE CONTENT TYPE YOURSELF ===
 		close(file_fd);
-		write(fileid, "HTTP/1.0 200 OK\r\n", strlen("HTTP/1.0 200 OK\r\n"));
+		write(fileid, "HTTP/1.0 200 OK\r\n", sizeof("HTTP/1.0 200 OK\r\n")-1);
 		buffer[3] = '.';
 		FILE *command = popen(buffer+3, "rb");
 		if(!command) appendLog(SORRY, "Failed to execute: %s", buffer+3);
