@@ -54,11 +54,11 @@ char logAbsolute[128];//Increase this if there are write/read errors
 int parentPid;
 
 char *formatLog(const char icon, const char *text) { //Must free malloc.
-	char *out = (char *)malloc(strlen(text) + sizeof("[ ] [00:00]: \n")); //+ size of the text and \n and \0
-	char timestring[6];
+	char *out = (char *)malloc(strlen(text) + sizeof("[ ] [00:00:00]: \n") + 1); //+ size of the text and \n and \0
+	char timestring[9];
 	const time_t rawtime = time(NULL);
 	
-	strftime(timestring, sizeof(timestring), "%H:%S", localtime(&rawtime));
+	strftime(timestring, sizeof(timestring), "%T", localtime(&rawtime));
 	sprintf(out, "[%c] [%s]: %s\n", icon, timestring, text);
 	return out;
 }
