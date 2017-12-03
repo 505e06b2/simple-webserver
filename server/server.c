@@ -108,9 +108,9 @@ void appendLog(int type, const char *fmt, ...) {
 }
 
 void web(int fileid, int request) {
-	int j, file_fd, buflen, len;
+	int j, file_fd, len;
 	long i, ret;
-	char *fstr;
+	char *fstr, *bufferFile;
 	static char buffer[BUFSIZE+1];
 	char ip[] = "255.255.255.255:65535"; //Can fit localhost too
 	char get[256]; //256 chars long should be OK unless it's in UTF8...
@@ -135,28 +135,25 @@ void web(int fileid, int request) {
 	
 	strcpy(get, buffer+5); //Fill GET with path
 	memcpy(ip, buffer+strlen(buffer)+17, sizeof(ip)-1); //Get IP but make sure there's always a \0 at the end
+	bufferFile = buffer+5;
 	
 	appendLog(LOG, "Get /%s <- %s", get, ip); //Buffer = "GET /[file]"; strlen(buffer)+2 = "HTTP 1.1"; strlen(buffer)+11 = "Host: [ip]"
-
-	for(j = 0; j < i-1; j++) if(buffer[j] == '.' && buffer[j+1] == '.') appendLog(SORRY, "Parent directory (..) path names not supported: %s", buffer);
 	
 	len = strlen(get);
-	if(len == 0 || get[len-1] == '/') memcpy(buffer+5+len, "index.html", sizeof("index.html")); //Default to index.html if there's a slash at the end of a get request
+	if(len == 0 || get[len-1] == '/') memcpy(bufferFile+len, "index.html", sizeof("index.html")); //Default to index.html if there's a slash at the end of a get request
 	else if(isDirectory(get)) { //Redirect to slash
-		len += strlen(ip) + 90-5;
+		len += strlen(ip) + 90-5; //90 is the http stuff -5 for formatting and removing \0
 		char *redirect = malloc(len);
 		sprintf(redirect, "HTTP/1.0 301 Moved Permanently\r\nLocation: http://%s/%s/\r\n", ip, get);
 		write(fileid, redirect, len);
 		exit(1);
 	}
 
-	if((file_fd = open(buffer+5, O_RDONLY)) == -1) appendLog(SORRY, "Failed to open file: %s", buffer+5);
+	if((file_fd = open(bufferFile, O_RDONLY)) == -1) appendLog(SORRY, "Failed to open file: %s", get);
 
-	buflen = strlen(buffer);
-	fstr = 0;
-	for(i = 0; extensions[i].ext != 0; i++) {
-		len = strlen(extensions[i].ext);
-		if( !strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
+	for(i = 0, j = 0, len = strlen(bufferFile), fstr = 0; extensions[i].ext != 0; i++) {
+		j = strlen(extensions[i].ext);
+		if( !strncmp(bufferFile + (len-j), extensions[i].ext, j)) {
 			fstr = extensions[i].filetype;
 			break;
 		}
@@ -176,7 +173,7 @@ void web(int fileid, int request) {
 		memset(buffer, 0, BUFSIZE+1);
 		fread(buffer, sizeof(char), BUFSIZE, command);
 		write(fileid, buffer, strlen(buffer));
-		appendLog(LOG, "Program finished with exit code: %d", pclose(command));
+		appendLog(LOG, "%s finished with exit code: %d", get, pclose(command));
 		
 	} else { //read file and output to browser
 		//appendLog(LOG, "SEND %s", buffer+5); //Don't need to log that we're trying to send; just going to imply
