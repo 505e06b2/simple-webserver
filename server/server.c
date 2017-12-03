@@ -18,9 +18,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdarg.h> //FOR APPENDLOG
+#include <time.h> //For Logging
 
 #define BUFSIZE 4096
-#define BUFLOG 1024
+#define BUFLOG 128
 #define ERROR 42
 #define SORRY 43
 #define LOG   44
@@ -52,10 +53,16 @@ struct {
 char logAbsolute[128];//Increase this if there are write/read errors
 int parentPid;
 
+char *formatLog(const char icon, const char *text) { //Must free malloc.
+	char *out = (char *)malloc(strlen(text) + sizeof("[ ]: \n")); //+ size of the text and \n and \0
+	sprintf(out, "[%c]: %s\n", icon, text);
+	return out;
+}
+
 void appendLog(int type, const char *fmt, ...) {
 	int logFile;
-	char appendLogbuffer[BUFLOG];
-	char formatLogbuffer[BUFLOG/4];
+	char formatLogbuffer[BUFLOG];
+	char *appendLog;
 	
 	va_list args;
     va_start(args, fmt);
@@ -64,26 +71,26 @@ void appendLog(int type, const char *fmt, ...) {
 
 	switch (type) {
 		case ERROR:
-			sprintf(appendLogbuffer,"[#]: %s Errno=%d", formatLogbuffer, errno);
+			appendLog = formatLog('#', formatLogbuffer);
 			break;
-		case SORRY: 
-			sprintf(appendLogbuffer, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<HTML><BODY><H1>Web Server Error: %s</H1></BODY></HTML>\r\n", formatLogbuffer);
+		case SORRY:
+			appendLog = formatLog('!', formatLogbuffer); //Write to file
+			//sprintf(formatLogbuffer, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<HTML><BODY><H1>Web Server Error: %s</H1></BODY></HTML>\r\n", formatLogbuffer);
 			//write(ioout, appendLogbuffer, strlen(appendLogbuffer)); //Write to browser
-			puts(appendLogbuffer); //Fuck it, this makes things nicer but probably slower but that doesn't matter since it's going to close
-			sprintf(appendLogbuffer,"[!]: %s", formatLogbuffer); //Write to file
+			puts(formatLogbuffer); //Fuck it, this makes things nicer but probably slower but that doesn't matter since it's going to close
 			break;
 		case BEGIN:
 			remove(logAbsolute); //No break so we can continue with the log
 		case LOG:
-			sprintf(appendLogbuffer, "[*]: %s", formatLogbuffer); //Write to browser
+			appendLog = formatLog('*', formatLogbuffer);
 			break;
 	}
 	
 	if((logFile = open(logAbsolute, O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
-		write(logFile, appendLogbuffer, strlen(appendLogbuffer)); 
-		write(logFile, "\n", 1);
+		write(logFile, appendLog, strlen(appendLog));
 		close(logFile);
 	}
+	free(appendLog); //Free the malloc
 	if(type != LOG && type != BEGIN) exit(3); //if it's fucked; close request
 }
 
@@ -100,8 +107,7 @@ void web(int fileid, int request) {
 		buffer[ret] = 0;
 	else buffer[0] = 0;
 
-	for(i=0;i<ret;i++) if(buffer[i] == '\r' || buffer[i] == '\n') buffer[i]='\0'; //Split request in buffer
-	appendLog(LOG, "%s <- %s", buffer, buffer+strlen(buffer)+2);
+	for(i = 0; i < ret; i++) if(buffer[i] == '\r' || buffer[i] == '\n') buffer[i] = '\0'; //Split request in buffer
 
 	if( strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4) ) appendLog(SORRY, "Only simple GET operation supported: %s", buffer);
 
@@ -111,13 +117,15 @@ void web(int fileid, int request) {
 			break;
 		}
 	}
+	
+	appendLog(LOG, "%s <- %s", buffer, buffer+strlen(buffer)+17); //Buffer = "GET /[file]"; strlen(buffer)+2 = "HTTP 1.1"; strlen(buffer)+11 = "Host: [ip]"
 
 	for(j = 0; j < i-1; j++) if(buffer[j] == '.' && buffer[j+1] == '.') appendLog(SORRY, "Parent directory (..) path names not supported: %s", buffer);
 
 	if( !strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6) ) strcpy(buffer,"GET /index.html"); //Default to index.html
 
 	buflen = strlen(buffer);
-	fstr = NULL;
+	fstr = 0;
 	for(i=0;extensions[i].ext != 0;i++) {
 		len = strlen(extensions[i].ext);
 		if( !strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
@@ -192,11 +200,11 @@ int main(int argc, char **argv) {
 		exit(4);
 	}
 
-	if(fork() != 0) return 0; //This kills the parent so stdio is free and it runs in the background
+	if(fork() != 0) return 0; //This kills the parent so stdio is dead and we don't block any more
 	signal(SIGCHLD, SIG_IGN); //Ignore when children close
 	signal(SIGHUP, SIG_IGN); //Ignore if a process hangs
 	for(i = 0; i < 32; i++) close(i);
-	setpgrp(); //Need this if the fork above is used since the first child will be made the main parent
+	setpgrp(); //This makes a new session and removes access to stdio
 
 	appendLog(BEGIN, "STARTING - Port: %s", argv[1]);
 
