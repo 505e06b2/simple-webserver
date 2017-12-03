@@ -19,11 +19,12 @@
 #include <arpa/inet.h>
 #include <stdarg.h> //FOR APPENDLOG
 
-#define BUFSIZE 8096
+#define BUFSIZE 4096
 #define BUFLOG 1024
 #define ERROR 42
 #define SORRY 43
 #define LOG   44
+#define BEGIN 41
 
 struct {
 	char *ext;
@@ -48,7 +49,7 @@ struct {
 	{0,			0}
 };
 
-char logAbsolute[512];//Increase this if there are write/read errors
+char logAbsolute[128];//Increase this if there are write/read errors
 int parentPid;
 
 void appendLog(int type, const char *fmt, ...) {
@@ -71,23 +72,25 @@ void appendLog(int type, const char *fmt, ...) {
 			puts(appendLogbuffer); //Fuck it, this makes things nicer but probably slower but that doesn't matter since it's going to close
 			sprintf(appendLogbuffer,"[!]: %s", formatLogbuffer); //Write to file
 			break;
+		case BEGIN:
+			remove(logAbsolute); //No break so we can continue with the log
 		case LOG:
 			sprintf(appendLogbuffer, "[*]: %s", formatLogbuffer); //Write to browser
 			break;
 	}
 	
-	if((logFile = open(logAbsolute, O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
+	if((logFile = open(logAbsolute, O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
 		write(logFile, appendLogbuffer, strlen(appendLogbuffer)); 
 		write(logFile, "\n", 1);
 		close(logFile);
 	}
-	if(type != LOG) exit(3); //if it's fucked; close request
+	if(type != LOG && type != BEGIN) exit(3); //if it's fucked; close request
 }
 
 void web(int fileid, int request) {
 	int j, file_fd, buflen, len;
 	long i, ret;
-	char * fstr;
+	char *fstr;
 	static char buffer[BUFSIZE+1];
 
 	ret = read(fileid, buffer, BUFSIZE); 
@@ -178,12 +181,12 @@ int main(int argc, char **argv) {
 	
 	//Set absolute path for log file or it becomes a security concern since anyone can read it
 	if(getcwd(logAbsolute, sizeof(logAbsolute)) == NULL) {
-		printf("ERROR: Can't get current working directory into 512bytes...\n", argv[2]);
+		printf("ERROR: Can't get current working directory into %dbytes...\n", sizeof(logAbsolute));
 		exit(4);
 	} else {
 		strcat(logAbsolute, "/server.log");
 	}
-	
+
 	if(chdir(argv[2]) == -1) { 
 		printf("ERROR: Can't Change to directory %s\n", argv[2]);
 		exit(4);
@@ -195,23 +198,23 @@ int main(int argc, char **argv) {
 	for(i = 0; i < 32; i++) close(i);
 	setpgrp(); //Need this if the fork above is used since the first child will be made the main parent
 
-	appendLog(LOG, "STARTING - Port: %s", argv[1]);
+	appendLog(BEGIN, "STARTING - Port: %s", argv[1]);
 
 	if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) appendLog(ERROR, "System call: socket");
-	
+
 	port = atoi(argv[1]);
-	if(port < 0 || port >60000) appendLog(ERROR, "Invalid port number try [1,60000] - %s", argv[1]);
+	if(port < 0 || port > 60000) appendLog(ERROR, "Invalid port number try [1,60000] - %s", argv[1]);
 	
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
 	
-	if(bind(listenfd, (struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) appendLog(ERROR, "System call: bind");
+	if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) appendLog(ERROR, "System call: bind");
 	if(listen(listenfd, 64) < 0) appendLog(ERROR, "System call: listen");
 	
 	length = sizeof(cli_addr); //This was inside the loop but it gets set the same value every time?
 	for(hit = 1; ; hit++) { //Forever
-		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) appendLog(ERROR, 0, "system call", "accept", 0);
+		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) appendLog(ERROR, "System call: accept");
 
 		if((pid = fork()) < 0) appendLog(ERROR, "System call: fork");
 		else {
