@@ -1,6 +1,6 @@
 #  Makefile for server
-all:	server.c
-	gcc server.c -o server
+all:	src/server.c
+	gcc src/server.c -Isrc -o server
 	
 .PHONY:	run wkill lkill
 
